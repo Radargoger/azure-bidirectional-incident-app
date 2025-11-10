@@ -10,7 +10,7 @@
       }
     },
     "SOCRadarAPIKey": {
-      "type": "securestring",
+      "type": "secureString",
       "metadata": {
         "description": "SOCRadar API Key"
       }
@@ -109,7 +109,7 @@
             }
           },
           "actions": {
-            "Initialize_AlarmID_Variable": {
+            "Initialize_AlarmID": {
               "type": "InitializeVariable",
               "inputs": {
                 "variables": [
@@ -125,253 +125,93 @@
             "Check_Incident_Status": {
               "type": "If",
               "expression": {
-                "and": [
-                  {
-                    "equals": [
-                      "@triggerBody()?['object']?['properties']?['status']",
-                      "Closed"
-                    ]
-                  }
+                "equals": [
+                  "@triggerBody()?['object']?['properties']?['status']",
+                  "Closed"
                 ]
               },
               "actions": {
-                "Parse_Alert_Product_Names": {
-                  "type": "Compose",
-                  "inputs": "@triggerBody()?['object']?['properties']?['additionalData']?['alertProductNames']",
-                  "runAfter": {}
-                },
-                "Loop_Through_Product_Names": {
-                  "type": "Foreach",
-                  "foreach": "@outputs('Parse_Alert_Product_Names')",
-                  "actions": {
-                    "Check_If_SOCRadar_Alert": {
-                      "type": "If",
-                      "expression": {
-                        "and": [
-                          {
-                            "contains": [
-                              "@items('Loop_Through_Product_Names')",
-                              "SOCRadar-AlarmID-"
-                            ]
-                          }
-                        ]
-                      },
-                      "actions": {
-                        "Extract_Full_String": {
-                          "type": "Compose",
-                          "inputs": "@replace(items('Loop_Through_Product_Names'), 'SOCRadar-AlarmID-', '')",
-                          "runAfter": {}
-                        },
-                        "Parse_AlarmID_Parts": {
-                          "type": "Compose",
-                          "inputs": "@split(outputs('Extract_Full_String'), '|')",
-                          "runAfter": {
-                            "Extract_Full_String": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Set_AlarmID": {
-                          "type": "SetVariable",
-                          "inputs": {
-                            "name": "AlarmID",
-                            "value": "@{first(outputs('Parse_AlarmID_Parts'))}"
-                          },
-                          "runAfter": {
-                            "Parse_AlarmID_Parts": [
-                              "Succeeded"
-                            ]
-                          }
-                        }
-                      },
-                      "runAfter": {}
-                    }
-                  },
-                  "runAfter": {
-                    "Parse_Alert_Product_Names": [
-                      "Succeeded"
-                    ]
+                "Extract_AlarmID_From_Title": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "AlarmID",
+                    "value": "@trim(last(split(triggerBody()?['object']?['properties']?['title'], '-')))"
                   }
                 },
-                "Check_if_AlarmID_Exists": {
-                  "type": "If",
-                  "expression": {
-                    "and": [
-                      {
-                        "not": {
-                          "equals": [
-                            "@variables('AlarmID')",
-                            ""
-                          ]
-                        }
-                      },
-                      {
-                        "not": {
-                          "equals": [
-                            "@variables('AlarmID')",
-                            null
-                          ]
-                        }
-                      }
-                    ]
-                  },
-                  "actions": {
-                    "Determine_Close_Reason": {
-                      "type": "Switch",
-                      "expression": "@triggerBody()?['object']?['properties']?['classification']",
-                      "cases": {
-                        "FalsePositive": {
-                          "case": "FalsePositive",
-                          "actions": {
-                            "Close_as_False_Positive_in_SOCRadar": {
-                              "type": "Http",
-                              "inputs": {
-                                "method": "POST",
-                                "uri": "@{parameters('SOCRadarAPIEndpoint')}/company/@{parameters('SOCRadarCompanyId')}/incidents/@{variables('AlarmID')}/false-positive",
-                                "headers": {
-                                  "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
-                                  "Content-Type": "application/json"
-                                },
-                                "body": {
-                                  "alarmIds": [
-                                    "@int(variables('AlarmID'))"
-                                  ],
-                                  "comments": "❌ False Positive - Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
-                                }
-                              },
-                              "runAfter": {}
-                            }
-                          }
-                        },
-                        "TruePositive": {
-                          "case": "TruePositive",
-                          "actions": {
-                            "Resolve_Incident_in_SOCRadar": {
-                              "type": "Http",
-                              "inputs": {
-                                "method": "POST",
-                                "uri": "@{parameters('SOCRadarAPIEndpoint')}/company/@{parameters('SOCRadarCompanyId')}/incidents/@{variables('AlarmID')}/resolve",
-                                "headers": {
-                                  "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
-                                  "Content-Type": "application/json"
-                                },
-                                "body": {
-                                  "alarmIds": [
-                                    "@int(variables('AlarmID'))"
-                                  ],
-                                  "comments": "✅ True Positive - Resolved. Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
-                                }
-                              },
-                              "runAfter": {}
-                            }
-                          }
-                        },
-                        "BenignPositive": {
-                          "case": "BenignPositive",
-                          "actions": {
-                            "Resolve_as_BenignPositive_in_SOCRadar": {
-                              "type": "Http",
-                              "inputs": {
-                                "method": "POST",
-                                "uri": "@{parameters('SOCRadarAPIEndpoint')}/company/@{parameters('SOCRadarCompanyId')}/incidents/@{variables('AlarmID')}/resolve",
-                                "headers": {
-                                  "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
-                                  "Content-Type": "application/json"
-                                },
-                                "body": {
-                                  "alarmIds": [
-                                    "@int(variables('AlarmID'))"
-                                  ],
-                                  "comments": "ℹ️ Benign Positive - Resolved. Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
-                                }
-                              },
-                              "runAfter": {}
-                            }
-                          }
-                        }
-                      },
-                      "default": {
-                        "actions": {
-                          "Resolve_as_Default_in_SOCRadar": {
-                            "type": "Http",
-                            "inputs": {
-                              "method": "POST",
-                              "uri": "@{parameters('SOCRadarAPIEndpoint')}/company/@{parameters('SOCRadarCompanyId')}/incidents/@{variables('AlarmID')}/resolve",
-                              "headers": {
-                                "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
-                                "Content-Type": "application/json"
-                              },
-                              "body": {
-                                "alarmIds": [
-                                  "@int(variables('AlarmID'))"
-                                ],
-                                "comments": "ℹ️ Closed in Sentinel. Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
-                              }
+                "Determine_Close_Reason": {
+                  "type": "Switch",
+                  "expression": "@triggerBody()?['object']?['properties']?['classification']",
+                  "cases": {
+                    "FalsePositive": {
+                      "actions": {
+                        "Close_as_False_Positive_in_SOCRadar": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
+                            "headers": {
+                              "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
+                              "Content-Type": "application/json"
                             },
-                            "runAfter": {}
+                            "body": {
+                              "alarm_ids": [
+                                "@variables('AlarmID')"
+                              ],
+                              "status": 9,
+                              "comments": "❌ False Positive - Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                            }
                           }
                         }
-                      },
-                      "runAfter": {}
-                    },
-                    "Add_Comment_to_Sentinel_Incident": {
-                      "type": "ApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connection": {
-                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
-                          }
-                        },
-                        "method": "post",
-                        "path": "/Incidents/Comment",
-                        "body": {
-                          "incidentArmId": "@triggerBody()?['object']?['id']",
-                          "message": "✅ SOCRadar alarm senkronize edildi. Alarm ID: @{variables('AlarmID')}"
-                        }
-                      },
-                      "runAfter": {
-                        "Determine_Close_Reason": [
-                          "Succeeded"
-                        ]
                       }
+                    }
+                  },
+                  "default": {
+                    "actions": {
+                      "Close_as_Resolved_in_SOCRadar": {
+                        "type": "Http",
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
+                          "headers": {
+                            "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
+                            "Content-Type": "application/json"
+                          },
+                          "body": {
+                            "alarm_ids": [
+                              "@variables('AlarmID')"
+                            ],
+                            "status": 2,
+                            "comments": "✅ Resolved - Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "Add_Comment_To_Sentinel_Incident": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/Incidents/Comment",
+                    "body": {
+                      "incidentArmId": "@triggerBody()?['object']?['id']",
+                      "message": "✅ SOCRadar alarm updated. Alarm ID: @{variables('AlarmID')}"
                     }
                   },
                   "runAfter": {
-                    "Loop_Through_Product_Names": [
+                    "Determine_Close_Reason": [
                       "Succeeded"
                     ]
-                  },
-                  "else": {
-                    "actions": {
-                      "Add_Warning_Comment": {
-                        "type": "ApiConnection",
-                        "inputs": {
-                          "host": {
-                            "connection": {
-                              "name": "@parameters('$connections')['azuresentinel']['connectionId']"
-                            }
-                          },
-                          "method": "post",
-                          "path": "/Incidents/Comment",
-                          "body": {
-                            "incidentArmId": "@triggerBody()?['object']?['id']",
-                            "message": "⚠️ SOCRadar Alarm ID bulunamadı. ProductName formatı: 'SOCRadar-AlarmID-[ID]'"
-                          }
-                        },
-                        "runAfter": {}
-                      }
-                    }
                   }
                 }
-              },
-              "runAfter": {
-                "Initialize_AlarmID_Variable": [
-                  "Succeeded"
-                ]
               }
             }
-          },
-          "outputs": {}
+          }
         },
         "parameters": {
           "$connections": {
