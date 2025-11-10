@@ -93,12 +93,12 @@
                   "type": "SetVariable",
                   "inputs": {
                     "name": "AlarmID",
-                    "value": "@trim(last(split(triggerBody()?['object']?['properties']?['title'], '-')))"
+                    "value": "@if(empty(triggerBody()?['object']?['properties']?['title']), '', trim(last(split(triggerBody()?['object']?['properties']?['title'], '-'))))"
                   }
                 },
                 "Determine_Close_Reason": {
                   "type": "Switch",
-                  "expression": "@triggerBody()?['object']?['properties']?['classification']",
+                  "expression": "@if(empty(triggerBody()?['object']?['properties']?['classification']), 'Unknown', triggerBody()?['object']?['properties']?['classification'])",
                   "cases": {
                     "FalsePositive": {
                       "case": "FalsePositive",
@@ -115,7 +115,7 @@
                             "body": {
                               "alarm_ids": ["@variables('AlarmID')"],
                               "status": 9,
-                              "comments": "❌ False Positive - Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                              "comments": "@concat('❌ False Positive - Sentinel Incident: ', if(empty(triggerBody()?['object']?['properties']?['incidentNumber']), 'Unknown', triggerBody()?['object']?['properties']?['incidentNumber']))"
                             }
                           }
                         }
@@ -136,7 +136,7 @@
                           "body": {
                             "alarm_ids": ["@variables('AlarmID')"],
                             "status": 2,
-                            "comments": "✅ Resolved - Sentinel Incident: @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                            "comments": "@concat('✅ Resolved - Sentinel Incident: ', if(empty(triggerBody()?['object']?['properties']?['incidentNumber']), 'Unknown', triggerBody()?['object']?['properties']?['incidentNumber']))"
                           }
                         }
                       }
@@ -158,7 +158,7 @@
                     "path": "/Incidents/Comment",
                     "body": {
                       "incidentArmId": "@triggerBody()?['object']?['id']",
-                      "message": "✅ SOCRadar alarm updated. Alarm ID: @{variables('AlarmID')}"
+                      "message": "@concat('✅ SOCRadar alarm updated. Alarm ID: ', if(empty(variables('AlarmID')), 'Unknown', variables('AlarmID')))"
                     }
                   }
                 }
