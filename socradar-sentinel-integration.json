@@ -143,6 +143,7 @@
                   "expression": "@triggerBody()?['object']?['properties']?['classification']",
                   "cases": {
                     "FalsePositive": {
+                      "case": "FalsePositive",
                       "actions": {
                         "Close_as_False_Positive_in_SOCRadar": {
                           "type": "Http",
