@@ -17,8 +17,11 @@
       "type": "String",
       "defaultValue": "330"
     },
-    "$connections": {
-      "type": "Object"
+    "AzureSentinelConnectionName": {
+      "type": "String",
+      "metadata": {
+        "description": "Logic App için Azure Sentinel connection resource ID"
+      }
     }
   },
   "resources": [
@@ -31,13 +34,27 @@
         "definition": {
           "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
           "contentVersion": "1.0.0.0",
+          "parameters": {
+            "AzureSentinelConnectionName": {
+              "type": "String"
+            },
+            "SOCRadarAPIKey": {
+              "type": "SecureString"
+            },
+            "SOCRadarAPIEndpoint": {
+              "type": "String"
+            },
+            "SOCRadarCompanyId": {
+              "type": "String"
+            }
+          },
           "triggers": {
             "Microsoft_Sentinel_incident": {
               "type": "ApiConnectionWebhook",
               "inputs": {
                 "host": {
                   "connection": {
-                    "name": "@parameters('$connections')['azuresentinel']?['connectionId']"
+                    "name": "@parameters('AzureSentinelConnectionName')"
                   }
                 },
                 "body": {
@@ -50,7 +67,6 @@
           "actions": {
             "Initialize_AlarmID": {
               "type": "InitializeVariable",
-              "runAfter": {},
               "inputs": {
                 "variables": [
                   {
@@ -59,19 +75,20 @@
                     "value": ""
                   }
                 ]
-              }
+              },
+              "runAfter": {}
             },
             "Check_Incident_Status": {
               "type": "If",
-              "runAfter": {
-                "Initialize_AlarmID": [
-                  "Succeeded"
-                ]
-              },
               "expression": {
                 "equals": [
                   "@triggerBody()?['object']?['properties']?['status']",
                   "Closed"
+                ]
+              },
+              "runAfter": {
+                "Initialize_AlarmID": [
+                  "Succeeded"
                 ]
               },
               "actions": {
@@ -143,7 +160,7 @@
                   "inputs": {
                     "host": {
                       "connection": {
-                        "name": "@parameters('$connections')['azuresentinel']?['connectionId']"
+                        "name": "@parameters('AzureSentinelConnectionName')"
                       }
                     },
                     "method": "post",
@@ -159,12 +176,11 @@
                 "actions": {}
               }
             }
-          },
-          "outputs": {}
+          }
         },
         "parameters": {
-          "$connections": {
-            "value": "[parameters('$connections')]"
+          "AzureSentinelConnectionName": {
+            "value": "[parameters('AzureSentinelConnectionName')]"
           },
           "SOCRadarAPIKey": {
             "value": "[parameters('SOCRadarAPIKey')]"
