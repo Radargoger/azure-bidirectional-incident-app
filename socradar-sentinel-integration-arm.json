@@ -37,7 +37,7 @@
               "inputs": {
                 "host": {
                   "connection": {
-                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                    "name": "@parameters('$connections')['azuresentinel']?['connectionId']"
                   }
                 },
                 "body": {
@@ -49,8 +49,8 @@
           },
           "actions": {
             "Initialize_AlarmID": {
-              "runAfter": {},
               "type": "InitializeVariable",
+              "runAfter": {},
               "inputs": {
                 "variables": [
                   {
@@ -62,12 +62,12 @@
               }
             },
             "Check_Incident_Status": {
+              "type": "If",
               "runAfter": {
                 "Initialize_AlarmID": [
                   "Succeeded"
                 ]
               },
-              "type": "If",
               "expression": {
                 "equals": [
                   "@triggerBody()?['object']?['properties']?['status']",
@@ -92,8 +92,8 @@
                         "Close_as_False_Positive_in_SOCRadar": {
                           "type": "Http",
                           "inputs": {
-                            "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
                             "method": "POST",
+                            "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
                             "headers": {
                               "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
                               "Content-Type": "application/json"
@@ -115,8 +115,8 @@
                       "Close_as_Resolved_in_SOCRadar": {
                         "type": "Http",
                         "inputs": {
-                          "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
                           "method": "POST",
+                          "uri": "@{concat(parameters('SOCRadarAPIEndpoint'), '/company/', parameters('SOCRadarCompanyId'), '/alarms/status/change')}",
                           "headers": {
                             "Authorization": "Bearer @{parameters('SOCRadarAPIKey')}",
                             "Content-Type": "application/json"
@@ -134,16 +134,16 @@
                   }
                 },
                 "Add_Comment_To_Sentinel_Incident": {
+                  "type": "ApiConnection",
                   "runAfter": {
                     "Determine_Close_Reason": [
                       "Succeeded"
                     ]
                   },
-                  "type": "ApiConnection",
                   "inputs": {
                     "host": {
                       "connection": {
-                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        "name": "@parameters('$connections')['azuresentinel']?['connectionId']"
                       }
                     },
                     "method": "post",
@@ -154,6 +154,9 @@
                     }
                   }
                 }
+              },
+              "else": {
+                "actions": {}
               }
             }
           },
