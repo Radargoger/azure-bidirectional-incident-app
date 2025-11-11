@@ -17,12 +17,16 @@
       "type": "String",
       "defaultValue": "330"
     },
-    "ExistingAzureSentinelConnectionId": {
+    "SentinelConnectionName": {
       "type": "String",
+      "defaultValue": "azuresentinel",
       "metadata": {
-        "description": "Mevcut Azure Sentinel Connection Resource ID"
+        "description": "Azure Sentinel API Connection adı"
       }
     }
+  },
+  "variables": {
+    "sentinelConnectionId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Web/connections/', parameters('SentinelConnectionName'))]"
   },
   "resources": [
     {
@@ -35,8 +39,9 @@
           "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
           "contentVersion": "1.0.0.0",
           "parameters": {
-            "AzureSentinelConnectionName": {
-              "type": "String"
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
             },
             "SOCRadarAPIKey": {
               "type": "SecureString"
@@ -54,13 +59,13 @@
               "inputs": {
                 "host": {
                   "connection": {
-                    "name": "@parameters('AzureSentinelConnectionName')"
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
                   }
                 },
                 "body": {
                   "callback_url": "@{listCallbackUrl()}"
                 },
-                "path": "/incident-update"
+                "path": "/incident-creation"
               }
             }
           },
@@ -80,9 +85,13 @@
             "Check_Incident_Status": {
               "type": "If",
               "expression": {
-                "equals": [
-                  "@triggerBody()?['object']?['properties']?['status']",
-                  "Closed"
+                "and": [
+                  {
+                    "equals": [
+                      "@triggerBody()?['object']?['properties']?['status']",
+                      "Closed"
+                    ]
+                  }
                 ]
               },
               "runAfter": {
@@ -98,7 +107,10 @@
                 },
                 "Determine_Close_Reason": {
                   "type": "Switch",
-                  "expression": "@if(empty(triggerBody()?['object']?['properties']?['classification']), 'Unknown', triggerBody()?['object']?['properties']?['classification'])",
+                  "expression": "@coalesce(triggerBody()?['object']?['properties']?['classification'], 'Unknown')",
+                  "runAfter": {
+                    "Extract_AlarmID_From_Title": ["Succeeded"]
+                  },
                   "cases": {
                     "FalsePositive": {
                       "case": "FalsePositive",
@@ -113,9 +125,9 @@
                               "Content-Type": "application/json"
                             },
                             "body": {
-                              "alarm_ids": ["@variables('AlarmID')"],
+                              "alarm_ids": ["@{variables('AlarmID')}"],
                               "status": 9,
-                              "comments": "@concat('❌ False Positive - Sentinel Incident: ', if(empty(triggerBody()?['object']?['properties']?['incidentNumber']), 'Unknown', triggerBody()?['object']?['properties']?['incidentNumber']))"
+                              "comments": "@{concat('❌ False Positive - Sentinel Incident: ', coalesce(triggerBody()?['object']?['properties']?['incidentNumber'], 'Unknown'))}"
                             }
                           }
                         }
@@ -134,9 +146,9 @@
                             "Content-Type": "application/json"
                           },
                           "body": {
-                            "alarm_ids": ["@variables('AlarmID')"],
+                            "alarm_ids": ["@{variables('AlarmID')}"],
                             "status": 2,
-                            "comments": "@concat('✅ Resolved - Sentinel Incident: ', if(empty(triggerBody()?['object']?['properties']?['incidentNumber']), 'Unknown', triggerBody()?['object']?['properties']?['incidentNumber']))"
+                            "comments": "@{concat('✅ Resolved - Sentinel Incident: ', coalesce(triggerBody()?['object']?['properties']?['incidentNumber'], 'Unknown'))}"
                           }
                         }
                       }
@@ -151,27 +163,30 @@
                   "inputs": {
                     "host": {
                       "connection": {
-                        "name": "@parameters('AzureSentinelConnectionName')"
+                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
                       }
                     },
                     "method": "post",
                     "path": "/Incidents/Comment",
                     "body": {
                       "incidentArmId": "@triggerBody()?['object']?['id']",
-                      "message": "@concat('✅ SOCRadar alarm updated. Alarm ID: ', if(empty(variables('AlarmID')), 'Unknown', variables('AlarmID')))"
+                      "message": "@{concat('✅ SOCRadar alarm updated. Alarm ID: ', coalesce(variables('AlarmID'), 'Unknown'))}"
                     }
                   }
                 }
-              },
-              "else": {
-                "actions": {}
               }
             }
           }
         },
         "parameters": {
-          "AzureSentinelConnectionName": {
-            "value": "[parameters('ExistingAzureSentinelConnectionId')]"
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[variables('sentinelConnectionId')]",
+                "connectionName": "[parameters('SentinelConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+              }
+            }
           },
           "SOCRadarAPIKey": {
             "value": "[parameters('SOCRadarAPIKey')]"
